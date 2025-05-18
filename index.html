@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>まるばつゲーム（サイズ選択可能）</title>
+  <style>
+    body {
+      background-color: #1a1a40;
+      color: #eee;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      text-align: center;
+      margin: 40px 0;
+    }
+
+    h1 {
+      font-size: 2.5rem;
+      margin-bottom: 10px;
+      letter-spacing: 0.1em;
+      text-shadow:
+        0 0 8px #49f;
+    }
+
+    #turn-display {
+      font-size: 1.3rem;
+      margin: 20px 0 20px;
+      color: #49f;
+      font-weight: bold;
+      text-shadow:
+        0 0 5px #49f88a;
+    }
+
+    /* 盤面サイズ固定・大きめに */
+    #board {
+      margin: 0 auto;
+      border-collapse: collapse;
+      user-select: none;
+      width: 320px;
+      height: 320px;
+      table-layout: fixed;
+      --size: 3;
+    }
+
+    #board tr {
+      height: calc(320px / var(--size));
+    }
+
+    #board td {
+      width: calc(320px / var(--size));
+      height: calc(320px / var(--size));
+      border: 3px solid #49f;
+      font-size: 3rem;
+      font-weight: bold;
+      color: #eee;
+      cursor: pointer;
+      transition: background-color 0.3s, box-shadow 0.3s;
+      background: linear-gradient(145deg, #222831, #2c3243);
+      text-align: center;
+      vertical-align: middle;
+      box-shadow:
+        inset 3px 3px 8px #1b1f28,
+        inset -3px -3px 8px #333c53;
+      position: relative;
+      border-radius: 14px;
+      user-select: none;
+    }
+
+    #board td.filled {
+      color: #aaf;
+      text-shadow:
+        0 0 5px #68f,
+        0 0 15px #68f;
+      background: linear-gradient(145deg, #2c3243, #222831);
+      box-shadow:
+        0 0 15px #49f,
+        inset 0 0 15px #2f3a50;
+    }
+
+    #board td.next-to-remove {
+      opacity: 0.4;
+      box-shadow:
+        0 0 15px 5px rgba(73, 159, 255, 0.7),
+        inset 0 0 10px #49f;
+      transition: opacity 0.5s ease;
+    }
+
+    #board td:hover:not(.filled) {
+      background: linear-gradient(145deg, #3a4170, #465184);
+      box-shadow: 0 0 18px #4a7fff;
+    }
+
+    #restart-btn {
+      margin-top: 20px;
+      background-color: #49f;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      font-size: 1.2rem;
+      border-radius: 10px;
+      cursor: pointer;
+      box-shadow: 0 0 10px #49f88a;
+      transition: background-color 0.3s;
+      user-select: none;
+    }
+
+    #restart-btn:hover {
+      background-color: #3670d0;
+    }
+
+    #board-size {
+      font-size: 1.1rem;
+      padding: 4px 8px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <h1>まるばつゲーム</h1>
+
+  <label for="board-size">盤面サイズ：</label>
+  <select id="board-size">
+    <option value="3" selected>3 × 3</option>
+    <option value="4">4 × 4</option>
+  </select>
+
+  <p id="turn-display">○のターン</p>
+
+  <table id="board"></table>
+
+  <button id="restart-btn">リスタート</button>
+
+  <script>
+    (() => {
+      let SIZE = 3; // 初期盤サイズ3x3
+      let board = [];
+      let queue = { '○': [], '×': [] }; // それぞれ3つまで保持
+      let turn = '○';
+
+      const boardElem = document.getElementById('board');
+      const turnDisplay = document.getElementById('turn-display');
+      const sizeSelect = document.getElementById('board-size');
+      const restartBtn = document.getElementById('restart-btn');
+
+      let cells = [];
+
+      function setBoardCSSSize() {
+        boardElem.style.setProperty('--size', SIZE);
+        const baseSize = 320;
+        if (SIZE === 3) {
+          boardElem.style.width = baseSize + 'px';
+          boardElem.style.height = baseSize + 'px';
+        } else if (SIZE === 4) {
+          boardElem.style.width = (baseSize * 4 / 3) + 'px';
+          boardElem.style.height = (baseSize * 4 / 3) + 'px';
+        }
+      }
+
+      // 勝利判定：3つ揃い（横・縦・斜め）
+      function checkWin() {
+        // 横
+        for (let r = 0; r < SIZE; r++) {
+          for (let c = 0; c <= SIZE - 3; c++) {
+            const base = board[r * SIZE + c];
+            if (!base) continue;
+            let win = true;
+            for (let i = 1; i < 3; i++) {
+              if (board[r * SIZE + c + i] !== base) {
+                win = false;
+                break;
+              }
+            }
+            if (win) return base;
+          }
+        }
+        // 縦
+        for (let c = 0; c < SIZE; c++) {
+          for (let r = 0; r <= SIZE - 3; r++) {
+            const base = board[r * SIZE + c];
+            if (!base) continue;
+            let win = true;
+            for (let i = 1; i < 3; i++) {
+              if (board[(r + i) * SIZE + c] !== base) {
+                win = false;
+                break;
+              }
+            }
+            if (win) return base;
+          }
+        }
+        // 斜め右下
+        for (let r = 0; r <= SIZE - 3; r++) {
+          for (let c = 0; c <= SIZE - 3; c++) {
+            const base = board[r * SIZE + c];
+            if (!base) continue;
+            let win = true;
+            for (let i = 1; i < 3; i++) {
+              if (board[(r + i) * SIZE + c + i] !== base) {
+                win = false;
+                break;
+              }
+            }
+            if (win) return base;
+          }
+        }
+        // 斜め左下
+        for (let r = 0; r <= SIZE - 3; r++) {
+          for (let c = 2; c < SIZE; c++) {
+            const base = board[r * SIZE + c];
+            if (!base) continue;
+            let win = true;
+            for (let i = 1; i < 3; i++) {
+              if (board[(r + i) * SIZE + c - i] !== base) {
+                win = false;
+                break;
+              }
+            }
+            if (win) return base;
+          }
+        }
+        return null;
+      }
+
+      function createBoardTable() {
+        boardElem.innerHTML = '';
+        cells = [];
+
+        setBoardCSSSize();
+
+        for (let r = 0; r < SIZE; r++) {
+          const tr = document.createElement('tr');
+          for (let c = 0; c < SIZE; c++) {
+            const td = document.createElement('td');
+            td.dataset.pos = r * SIZE + c;
+            tr.appendChild(td);
+            cells.push(td);
+          }
+          boardElem.appendChild(tr);
+        }
+      }
+
+      function updateBoard() {
+        cells.forEach((cell, i) => {
+          cell.textContent = board[i] || '';
+          cell.classList.remove('filled', 'next-to-remove');
+
+          if (board[i]) {
+            cell.classList.add('filled');
+          }
+        });
+
+        if (queue[turn].length === 3) {
+          const nextRemovePos = queue[turn][0];
+          cells[nextRemovePos].classList.add('next-to-remove');
+        }
+
+        turnDisplay.textContent = `${turn}のターン`;
+      }
+
+      function reset() {
+        board = Array(SIZE * SIZE).fill(null);
+        queue = { '○': [], '×': [] };
+        turn = '○';
+        updateBoard();
+      }
+
+      function handleClick(e) {
+        if (!e.target.matches('td')) return;
+        const pos = Number(e.target.dataset.pos);
+        if (board[pos]) return;
+
+        if (queue[turn].length === 3) {
+          const firstPos = queue[turn].shift();
+          board[firstPos] = null;
+        }
+
+        board[pos] = turn;
+        queue[turn].push(pos);
+
+        updateBoard();
+
+        const winner = checkWin();
+        if (winner) {
+          alert(`${winner}の勝ち！`);
+          reset();
+          return;
+        }
+
+        if (board.every(cell => cell !== null)) {
+          alert('引き分け！');
+          reset();
+          return;
+        }
+
+        turn = turn === '○' ? '×' : '○';
+        updateBoard();
+      }
+
+      sizeSelect.addEventListener('change', () => {
+        SIZE = Number(sizeSelect.value);
+        createBoardTable();
+        reset();
+      });
+
+      restartBtn.addEventListener('click', () => {
+        reset();
+      });
+
+      createBoardTable();
+      reset();
+
+      boardElem.addEventListener('click', handleClick);
+    })();
+  </script>
+</body>
+</html>
